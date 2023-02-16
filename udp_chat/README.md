@@ -12,14 +12,14 @@ The script has methods to handle custom commands from the clients:
 ## Usage
 The script does not use any external libraries, only built-in Python libraries hence the script can be executed by using the following command:
 ```
-python chat_server.py [port_number]
+python server.py [port_number]
 ```
 The script does require an argument `port_number` which is the port number that the server will listen on.
 
 ## Operation
 Given below are a few examples of how to test this script. Before creating a client ensure that the server is running
 ```
-python3 chat_server.py 12000
+python3 server.py 12000
 ```
 Once the server is started on a certain port (in this case 12000). We can create and spawn simple clients. Clients can be created using Python or any other relevant programming language however for testing we are creating clients using [Netcat](https://netcat.sourceforge.net/).
 ```
