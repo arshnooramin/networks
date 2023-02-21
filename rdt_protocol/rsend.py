@@ -47,8 +47,8 @@ def parse_args():
     # add additional algorithms here.
     parser.add_argument('--alg',
                         help='The algorithm to use [sw].',
-                        default='sw',
-                        choices=['sw', 'yours'])
+                        default='rdt',
+                        choices=['sw', 'rdt'])
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -64,6 +64,18 @@ if __name__ == "__main__":
         # map files list into multiple calls
         try:
             result = list(map(lambda x: algs.sw.send_file(
+                    filename=x,
+                    dest=(args.dst, args.port),
+                    mtu=args.mtu),
+                args.files))
+        except TransferFailed as x:
+            logging.error("Transfer failed: {}".format(x))
+            raise(x)
+            sys.exit(-5)
+    elif args.alg == 'rdt': # stop and wait protocol
+        # map files list into multiple calls
+        try:
+            result = list(map(lambda x: algs.rdt.send_file(
                     filename=x,
                     dest=(args.dst, args.port),
                     mtu=args.mtu),

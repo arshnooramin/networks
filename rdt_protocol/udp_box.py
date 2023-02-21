@@ -55,14 +55,14 @@ def parse_args():
                         default = '50',
                         help='Bandwidth in K BYTES per second [50].')
     parser.add_argument('--addr',
-                        default = '0.0.0.0',
+                        default = 'localhost',
                         help='Local addres to listen on [0.0.0.0].')
     parser.add_argument('--port',
                         help='Local port to listen on [8880].',
                         default=8880,
                         type=int)
     parser.add_argument('--remote_addr',
-                        default = '0.0.0.0',
+                        default = 'localhost',
                         help='Remote addres to send received packets to [localhost].')
     parser.add_argument('--remote_port',
                         help='Remote port to send packets to [8888].',

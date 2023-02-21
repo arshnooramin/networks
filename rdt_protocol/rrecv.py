@@ -37,7 +37,7 @@ def parse_args():
                         type=int,
                         help='Maximum transmition unit (MTU) (bytes) [100].')
     parser.add_argument('--addr',
-                        default = '0.0.0.0',
+                        default = 'localhost',
                         help='Local addres to listen on [0.0.0.0].')
     parser.add_argument('--port',
                         help='Port to listen on [8888].',
@@ -47,8 +47,8 @@ def parse_args():
     # add additional algorithms here.
     parser.add_argument('--alg',
                         help='The algorithm to use [sw].',
-                        default='sw',
-                        choices=['sw', 'yours'])
+                        default='rdt',
+                        choices=['sw', 'rdt'])
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -70,6 +70,16 @@ if __name__ == "__main__":
             raise(x)
             sys.exit(-15)
     # add additional algorithms here.
+    elif args.alg == 'rdt': # custom reliable data transfer protocol
+        try:
+            algs.rdt.run_server(
+                    outdir=args.outdir,
+                    addr=(args.addr, args.port),
+                    mtu=args.mtu)
+        except Exception as x:
+            logging.error("Server died: {}".format(x))
+            raise(x)
+            sys.exit(-15)
     else:
         raise AlgorithmNotImplementedError()
     
