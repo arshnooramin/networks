@@ -1,84 +1,52 @@
 import socket
-import struct
-import time
+import sys
 
-class Traceroute:
-    def __init__(self, dest, hops):
-        self.dest = dest
-        self.hops = hops
-        self.ttl = 1
-        self.port = 33434
-    
-    def run_trace():
-        
-    
-    def get_receiver(self):
-        sock = socket.socket(
-            socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP
-        )
+def traceroute(hostname, port, max_hops=30, sttl=1):
+    # get the destination address
+    dest_addr = socket.gethostbyname(hostname)
 
+    for ttl in range(sttl, max_hops + 1):
+        # configure icmp socket
+        icmp_sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+        icmp_sock.settimeout(1)
+        icmp_sock.bind(("", port))
+
+        # configure udp socket
+        udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        udp_sock.setsockopt(socket.SOL_IP, socket.IP_TTL, ttl)
+
+        # send the ping
+        udp_sock.sendto("".encode(), (dest_addr, port))
+
+        recv_addr = None
         try:
-            sock.bind(('', self.port))
+            # if message received
+            _, recv_addr_arr = icmp_sock.recvfrom(512)
+            # get the address of the source
+            recv_addr = recv_addr_arr[0]
+            # try to get hostname
+            try:
+                recv_name = socket.gethostbyaddr(recv_addr)[0]
+            except:
+                recv_name = recv_addr
+            print(f"{ttl} {recv_name} ({recv_addr})")
         except:
-            raise ConnectionError("Failed to bind receiver socket")
-
-        return sock
-    
-    def get_sender(self):
-        sock = socket.socket(
-            socket.AF_INET, socket.sock_DGRAM, socket.IPPROTO_UDP
-        )
-
-        sock.setsockopt(socket.SOL_IP, socket.IP_TTL, self.ttl)
-
-        return sock
-
-def traceroute(host):
-    """Perform a traceroute to the given host."""
-    port = 33434
-    max_hops = 30
-    icmp = socket.getprotobyname("icmp")
-    udp = socket.getprotobyname("udp")
-    ttl = 1
-    while True:
-        # Create sockets for sending and receiving UDP packets.
-        sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, udp)
-        receiver = socket.socket(socket.AF_INET, socket.SOCK_RAW, icmp)
-        receiver.settimeout(3.0)
-        receiver.bind(("", port))
+            print(f"{ttl} * (*)")
+        finally:
+            # close sockets
+            icmp_sock.close()
+            udp_sock.close()
         
-        # Set the time-to-live (TTL) for the outgoing packet.
-        sender.setsockopt(socket.SOL_IP, socket.IP_TTL, ttl)
-        
-        # Send a UDP packet to the target host with the current TTL.
-        sender.sendto(b"", (host, port))
-        
-        # Record the time the packet was sent.
-        start_time = time.time()
-        
-        # Wait for a response from the target host or a timeout.
-        try:
-            _, addr = receiver.recvfrom(512)
-            end_time = time.time()
-            _, _, _, _, ttl, _ = struct.unpack("!BBHHHBBH4s4s", _) # Unpack the received packet
-            addr = addr[0]
-        except socket.timeout:
-            addr = None
-            end_time = None
-        
-        # Print the results for this hop.
-        if addr:
-            print(f"{ttl} {addr} {end_time - start_time:.3f} ms")
-        else:
-            print(f"{ttl} *")
-        
-        # Close the sockets.
-        sender.close()
-        receiver.close()
-        
-        # Exit if we've reached the maximum number of hops or the target host.
-        ttl += 1
-        if addr == host or ttl > max_hops:
+        # if the destination is reached break
+        if recv_addr and recv_addr == dest_addr:
+            print(f"Reached host {hostname} in {ttl} hops")
             break
 
-traceroute("bbc.co.uk")
+if __name__ == "__main__":
+    # expect a cli argument for the destination hostname
+    try:
+        hostname = sys.argv[1]
+    except:
+        raise ValueError("Usage: python traceroute.py [hostname]")
+    port = 33434
+    traceroute(hostname=hostname, port=port)
