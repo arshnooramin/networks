@@ -1,5 +1,9 @@
 import socket
 import sys
+import random
+import struct
+import time
+from classping import icmp_socket, checksum
 
 def traceroute(hostname, port, max_hops=30, sttl=1):
     # get the destination address
@@ -7,29 +11,38 @@ def traceroute(hostname, port, max_hops=30, sttl=1):
 
     for ttl in range(sttl, max_hops + 1):
         # configure icmp socket
-        icmp_sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
-        icmp_sock.settimeout(1)
-        icmp_sock.bind(("", port))
+        icmp_sock = icmp_socket()
+
+        ident = random.randint(0, 0xffff)
+        header = struct.pack("!BBHHH", 8, 0, 0, ident, 1)
+        send_time_ns = int (1e9 * time.time())
+        payload = struct.pack ("!Q", send_time_ns)
+
+        packet = header + payload
+        
+        c = checksum(packet)
+        header = struct.pack("!BBHHH", 8, 0, c, ident, 1)
+        packet = header + payload
 
         # configure udp socket
         udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         udp_sock.setsockopt(socket.SOL_IP, socket.IP_TTL, ttl)
 
         # send the ping
-        udp_sock.sendto("".encode(), (dest_addr, port))
+        udp_sock.sendto(packet, (dest_addr, port))
 
-        recv_addr = None
+        addr = None
         try:
             # if message received
-            _, recv_addr_arr = icmp_sock.recvfrom(512)
+            resp, addr = icmp_sock.recvfrom(1024)
             # get the address of the source
-            recv_addr = recv_addr_arr[0]
+            addr = addr[0]
             # try to get hostname
             try:
-                recv_name = socket.gethostbyaddr(recv_addr)[0]
+                name = socket.gethostbyaddr(addr)[0]
             except:
-                recv_name = recv_addr
-            print(f"{ttl} {recv_name} ({recv_addr})")
+                name = addr
+            print(f"{ttl} {name} ({addr})")
         except:
             print(f"{ttl} * (*)")
         finally:
@@ -38,7 +51,7 @@ def traceroute(hostname, port, max_hops=30, sttl=1):
             udp_sock.close()
         
         # if the destination is reached break
-        if recv_addr and recv_addr == dest_addr:
+        if addr and addr == dest_addr:
             print(f"Reached host {hostname} in {ttl} hops")
             break
 
