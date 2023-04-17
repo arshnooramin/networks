@@ -93,7 +93,10 @@ class TrafficGenerator:
                 rtt.append(recv_time - send_time)
                 recv_pkt_count += 1
 
-                _, recv_seq_num = recv_pkt.split(b"\\\\\\", 1)
+                try:
+                    _, recv_seq_num = recv_pkt.split(b"\\\\\\", 1)
+                except:
+                    recv_seq_num = -1
                 if (self.seq_num - 1) != int(recv_seq_num.decode().strip('\\')):
                     ooo_count += 1
 
