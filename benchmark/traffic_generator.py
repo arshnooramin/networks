@@ -134,9 +134,15 @@ class TrafficGenerator:
                 rtt_arr.append(recv_time - send_time)
                 recv_pkt_count += 1
 
-                _, recv_seq_num = recv_pkt.split(b"\\\\\\", 1)
-                if (self.seq_num - 1) != int(recv_seq_num.decode().strip('\\')):
+                try:
+                    _, recv_seq_num = recv_pkt.split(b"@@@@@@@@@@@@@@", 1)
+                    recv_seq_num = int(recv_seq_num.decode().strip('\\'))
+                except:
+                    recv_seq_num = -1
+                if (self.seq_num - 1) != recv_seq_num:
                     ooo_count += 1
+                
+                self.seq_num += 1
 
             if idx >= self.bandwidth:
                 elapsed_time = time.monotonic() - burst_time

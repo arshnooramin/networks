@@ -7,13 +7,13 @@ import argparse
 
 SEQ_C = 30
 
-def tcp_echo_server(addr, port, buf_size):
+def tcp_echo_server(host, port, buf_size):
     """
     tcp echo server
     """
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind((addr, port))
+        s.bind((host, port))
         s.listen()
         conn, addr = s.accept()
         with conn:
@@ -23,13 +23,13 @@ def tcp_echo_server(addr, port, buf_size):
                     break
                 conn.sendall(data)
 
-def udp_echo_server(addr, port, buf_size):
+def udp_echo_server(host, port, buf_size):
     """
     udp echo server
     """
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind((addr, port))
+        # s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind((host, port))
         while True:
             data, addr = s.recvfrom(buf_size)
             s.sendto(data, addr)
