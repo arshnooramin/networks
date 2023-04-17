@@ -29,7 +29,7 @@ def udp_echo_server(host, port, buf_size):
     """
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
         # s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind((host, port))
+        s.bind(('', port))
         while True:
             data, addr = s.recvfrom(buf_size)
             s.sendto(data, addr)
