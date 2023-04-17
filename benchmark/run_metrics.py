@@ -3,7 +3,7 @@ from statistics import median, mean
 from traffic_generator import TrafficGenerator
 
 def calculate_metrics(ooo_count, send_pkt_count, recv_pkt_count, rtt_arr):
-    loss_rate = (recv_pkt_count / send_pkt_count) * 100.0
+    loss_rate = ((send_pkt_count - recv_pkt_count) / send_pkt_count) * 100.0
     ooo_rate = (ooo_count / send_pkt_count) * 100.0
     min_rtt = min(rtt_arr)
     max_rtt = max(rtt_arr)
@@ -40,4 +40,4 @@ if __name__ == '__main__':
     print("Results:")
     print(f"Loss rate: {loss_rate:.2f}%")
     print(f"Out of order packet rate: {ooo_rate:.2f}%")
-    print(f"RTT - min: {min_rtt:.2f}, max: {max_rtt:.2f}, mean: {mean_rtt:.2f}, median: {median_rtt:.2f}")
+    print(f"RTT - min: {min_rtt:.5f}, max: {max_rtt:.5f}, mean: {mean_rtt:.5f}, median: {median_rtt:.5f}")

@@ -5,7 +5,7 @@ prompt: generate a echo server that can accept tcp or udp packets on a specified
 import socket
 import argparse
 
-SEQ_C = 15
+SEQ_C = 30
 
 def tcp_echo_server(addr, port, buf_size):
     """

@@ -18,7 +18,7 @@ class TrafficGenerator:
         self.duration = duration
 
         self.seq_num = 0
-        self.SEQ_C = 15
+        self.SEQ_C = 30
 
         self.config_protocol()
 
@@ -66,9 +66,8 @@ class TrafficGenerator:
 
     def gen_pkt(self):
         pkt = bytes([random.randint(0, 255) for _ in range(self.pkt_size)])
-        seq_b = "\\\\\\" + str(self.seq_num)
+        seq_b = "@@@@@@@@@@@@@@" + str(self.seq_num)
         pkt += seq_b.encode()
-        self.seq_num += 1
         return pkt
 
     def run_traffic_uniform(self):
@@ -89,16 +88,20 @@ class TrafficGenerator:
 
             recv_pkt = self.recv_func()
             recv_time = time.monotonic()
+
             if recv_pkt:
                 rtt.append(recv_time - send_time)
                 recv_pkt_count += 1
 
                 try:
-                    _, recv_seq_num = recv_pkt.split(b"\\\\\\", 1)
+                    _, recv_seq_num = recv_pkt.split(b"@@@@@@@@@@@@@@", 1)
+                    recv_seq_num = int(recv_seq_num.decode().strip('\\'))
                 except:
                     recv_seq_num = -1
-                if (self.seq_num - 1) != int(recv_seq_num.decode().strip('\\')):
+                if (self.seq_num - 1) != recv_seq_num:
                     ooo_count += 1
+                
+                self.seq_num += 1
 
             elapsed_time = time.monotonic() - send_time
             delay = interval - elapsed_time
