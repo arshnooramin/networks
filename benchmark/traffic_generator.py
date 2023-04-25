@@ -90,6 +90,7 @@ class TrafficGenerator:
             recv_time = time.monotonic()
 
             if recv_pkt:
+                self.seq_num += 1
                 rtt.append(recv_time - send_time)
                 recv_pkt_count += 1
 
@@ -100,8 +101,6 @@ class TrafficGenerator:
                     recv_seq_num = -1
                 if (self.seq_num - 1) != recv_seq_num:
                     ooo_count += 1
-                
-                self.seq_num += 1
 
             elapsed_time = time.monotonic() - send_time
             delay = interval - elapsed_time
@@ -131,6 +130,8 @@ class TrafficGenerator:
             recv_pkt = self.recv_func()
             recv_time = time.monotonic()
             if recv_pkt:
+                self.seq_num += 1
+
                 rtt_arr.append(recv_time - send_time)
                 recv_pkt_count += 1
 
@@ -141,8 +142,6 @@ class TrafficGenerator:
                     recv_seq_num = -1
                 if (self.seq_num - 1) != recv_seq_num:
                     ooo_count += 1
-                
-                self.seq_num += 1
 
             if idx >= self.bandwidth:
                 elapsed_time = time.monotonic() - burst_time
