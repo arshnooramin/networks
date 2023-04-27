@@ -151,121 +151,133 @@ def do_web_method(method, url, headers, payload):
 	except Exception:
 		pass
 		
-def handle_client(s, cachedir, blockhtml, blocked_domains):
-	"Run the proxy server on the given socket."
+def manage_threads(s, maxthreads, cachedir, blockhtml, blocked_domains):
 	log = logging.getLogger(__name__)
+
+	thread_arr = list()
 	while True:
 		# accept a connection
 		conn, addr = s.accept()
 		log.info(f"Accepted connection from {addr}.")
+
+		if len(thread_arr) < maxthreads:
+			cthread = threading.Thread(target=handle_client, args=(conn, addr, cachedir, blockhtml, blocked_domains))
+			thread_arr.append(cthread)
+			cthread.start()
 		
-		# close connection when done?
-		close_conn = True
+		for thread in thread_arr:
+			if not thread.is_alive():
+				thread_arr.remove(thread)
 
-		try:
-			# read the request, if we get a partial request it will fail and we'll ignore it
-			reqraw = conn.recv(1 << 16)
-			req = reqraw.decode('utf-8', errors='ignore')
+def handle_client(conn, addr, cachedir, blockhtml, blocked_domains):
+	"Run the proxy server on the given socket."
+	# close connection when done?
+	close_conn = True
 
-			log.debug(f"Reading req, got {len(req)} bytes.")
-			if len(req) == 0:
-				# the browser may try to open parallel connections but then close them
-				# without sending any data. So we just ignore them.
-				# our side of the socket will be closed by the finally block
-				continue
+	try:
+		# read the request, if we get a partial request it will fail and we'll ignore it
+		reqraw = conn.recv(1 << 16)
+		req = reqraw.decode('utf-8', errors='ignore')
+
+		log.debug(f"Reading req, got {len(req)} bytes.")
+		if len(req) == 0:
+			# the browser may try to open parallel connections but then close them
+			# without sending any data. So we just ignore them.
+			# our side of the socket will be closed by the finally block
+			return
 
 
-			# headers end with \r\n\r\n. find the end of the headers
-			endpos = req.find('\r\n\r\n')
+		# headers end with \r\n\r\n. find the end of the headers
+		endpos = req.find('\r\n\r\n')
 
-			if endpos == -1:
-				# no headers, ignore
-				log.debug(f"No headers, ignoring request: {req[:100]}")
-				continue
+		if endpos == -1:
+			# no headers, ignore
+			log.debug(f"No headers, ignoring request: {req[:100]}")
+			return
 
-			# html is a list of lines in the request
-			payload = reqraw[endpos+4:] # everything after the header in the raw request...
-			reqhead = req[0:endpos].split('\r\n')
+		# html is a list of lines in the request
+		payload = reqraw[endpos+4:] # everything after the header in the raw request...
+		reqhead = req[0:endpos].split('\r\n')
 
-			log.debug(f"Parsing request: {reqhead[0]}")
-			# parse the request
-			method, url, version = reqhead[0].split()
+		log.debug(f"Parsing request: {reqhead[0]}")
+		# parse the request
+		method, url, version = reqhead[0].split()
 
-			log.debug (f"got method: {method}, url: {url}, version: {version}: headers: {reqhead[1:]}")
+		log.debug (f"got method: {method}, url: {url}, version: {version}: headers: {reqhead[1:]}")
 
-			if is_blocked(url, blocked_domains):
-				log.debug(f"{url} matches a blocked domain - domain is blocked")
-				with open(blockhtml, "rb") as f:
-					conn.send(f.read())
-					continue
+		if is_blocked(url, blocked_domains):
+			log.debug(f"{url} matches a blocked domain - domain is blocked")
+			with open(blockhtml, "rb") as f:
+				conn.send(f.read())
+				return
 
-			# extract headers and remove empty lines at the end and convert to a dict			
-			headers = {k.strip():v.strip() for k,v in [x.split(":", maxsplit = 1) for x in reqhead[1:]]}
-					
-			# drop request to upgrade to https, if the browser is trying to do that
-			if 'Upgrade-Insecure-Requests' in headers:
-				del headers['Upgrade-Insecure-Requests']		
-
-			# add or update the x-forwarded-for header
-			if 'x-forwarded-for' in headers:
-				# add this ip to the list of forwarded ips
-				headers['x-forwarded-for'] = f"{headers['x-forwarded-for']}, {addr[0]}"
-			else:
-				# if there is no x-forwarded-for header, add it
-				headers['x-forwarded-for'] = addr[0]
-
-			# check the method
-			if method == "GET":
-				# hash the url to get the cache file name
-				cache_fn = hashlib.md5(url.encode()).hexdigest()
-				cache_path = os.path.join(cachedir, cache_fn)
+		# extract headers and remove empty lines at the end and convert to a dict			
+		headers = {k.strip():v.strip() for k,v in [x.split(":", maxsplit = 1) for x in reqhead[1:]]}
 				
-				# if the file already exists in cache send the cached version
-				if os.path.exists(cache_path):
-					log.debug("Cache HIT - getting resource from cache.")
-					with open(cache_path, "rb") as f:
-						chunk = f.read()
-						conn.send(chunk)
-					continue
-				
-				# if no cache, get the resource from the web
-				with open(cache_path, "wb") as f:
-					log.debug("Cache MISS - getting resource from web and caching.")
-					for chunk in do_web_method("GET", url, headers, payload):
-						f.write(chunk)
-						# send the result to the client
-						conn.send(chunk)
+		# drop request to upgrade to https, if the browser is trying to do that
+		if 'Upgrade-Insecure-Requests' in headers:
+			del headers['Upgrade-Insecure-Requests']		
 
-			elif method in ['POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']:
-				# these cannot be cached, make the same request to the server			
-				for chunk in do_web_method(method, url, headers, payload):					
+		# add or update the x-forwarded-for header
+		if 'x-forwarded-for' in headers:
+			# add this ip to the list of forwarded ips
+			headers['x-forwarded-for'] = f"{headers['x-forwarded-for']}, {addr[0]}"
+		else:
+			# if there is no x-forwarded-for header, add it
+			headers['x-forwarded-for'] = addr[0]
+
+		# check the method
+		if method == "GET":
+			# hash the url to get the cache file name
+			cache_fn = hashlib.md5(url.encode()).hexdigest()
+			cache_path = os.path.join(cachedir, cache_fn)
+			
+			# if the file already exists in cache send the cached version
+			if os.path.exists(cache_path):
+				log.debug("Cache HIT - getting resource from cache.")
+				with open(cache_path, "rb") as f:
+					chunk = f.read()
+					conn.send(chunk)
+				return
+			
+			# if no cache, get the resource from the web
+			with open(cache_path, "wb") as f:
+				log.debug("Cache MISS - getting resource from web and caching.")
+				for chunk in do_web_method("GET", url, headers, payload):
+					f.write(chunk)
 					# send the result to the client
 					conn.send(chunk)
-			elif method == "CONNECT":
-				# start a new thread to handle the https connection
-				threading.Thread(
-					target=handle_https, 
-					args=(conn, addr, url),
-					name=f"HTTPS:{addr[0]}:{addr[1]}", daemon=True).start()
-				
-				# need to leave the	connection open
-				close_conn = False
-			else:
-				# not supported, send our response back
-				resp = "HTTP/1.0 501 Not Implemented\r\n\r\n"
-				conn.send(resp.encode('utf-8'))
-		except Exception as x:
-			log.error(f"Error handling request: {x}")
-			traceback.print_exc()
-		finally:
-			if close_conn:
-				log.debug("Closing connection.")
-				try:
-					conn.shutdown(socket.SHUT_RDWR)
-					conn.close()
-				except OSError:
-					# the client may have closed the connection already which may cause an error when we close 
-					pass
+
+		elif method in ['POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']:
+			# these cannot be cached, make the same request to the server			
+			for chunk in do_web_method(method, url, headers, payload):					
+				# send the result to the client
+				conn.send(chunk)
+		elif method == "CONNECT":
+			# start a new thread to handle the https connection
+			threading.Thread(
+				target=handle_https, 
+				args=(conn, addr, url),
+				name=f"HTTPS:{addr[0]}:{addr[1]}", daemon=True).start()
+			
+			# need to leave the	connection open
+			close_conn = False
+		else:
+			# not supported, send our response back
+			resp = "HTTP/1.0 501 Not Implemented\r\n\r\n"
+			conn.send(resp.encode('utf-8'))
+	except Exception as x:
+		log.error(f"Error handling request: {x}")
+		traceback.print_exc()
+	finally:
+		if close_conn:
+			log.debug("Closing connection.")
+			try:
+				conn.shutdown(socket.SHUT_RDWR)
+				conn.close()
+			except OSError:
+				# the client may have closed the connection already which may cause an error when we close 
+				pass
 
 if __name__ == "__main__":    
 	parser = argparse.ArgumentParser(description='objcache server')
@@ -308,7 +320,8 @@ if __name__ == "__main__":
 	log.info(f"HTTP Proxy listening on TCP port {args.proxyport}.")
 	try:
 		# this is a sequential server, it can only handle one client at a time.
-		handle_client(s, args.datadir, args.blockhtml, blocked_domains)
+		# handle_client(s, args.datadir, args.blockhtml, blocked_domains)
+		manage_threads(s, args.threads, args.datadir, args.blockhtml, blocked_domains)
 	except KeyboardInterrupt:
 		log.info("<ctrl-c> Shutting down.")
 	
