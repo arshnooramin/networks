@@ -2,3 +2,5 @@
 */*.txt
 */*.json
 */files/
+*/__pycache__/
+*/cache/

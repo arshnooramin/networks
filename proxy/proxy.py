@@ -11,6 +11,31 @@ import threading
 import select
 import binascii
 import traceback
+import hashlib
+import os
+import re
+
+def init_cache(datadir):
+	"initialize the cache directory - check if it exists if not create"
+	if not os.path.exists(datadir):
+		os.makedirs(datadir)
+
+def get_blocked_domain(blockedfile):
+	"gets list of blocked domain from the blocked.txt file"
+	with open(blockedfile, "r") as f:
+		bd_arr = f.read().splitlines()
+	
+	# create regular expression patterns for efficient matching
+	# regex generated using ChatGPT
+	return [re.compile('.*{}.*'.format(domain)) for domain in bd_arr]
+
+
+def is_blocked(url, blocked_domains):
+	"checks if url matches blocked domain regex pattern"
+	for domain_regex in blocked_domains:
+		if domain_regex.match(url):
+			return True
+	return False
 	
 def handle_https(conn, addr, url):
 	"handle a https session on the socket <conn> to the given url."
@@ -126,7 +151,7 @@ def do_web_method(method, url, headers, payload):
 	except Exception:
 		pass
 		
-def handle_client(s, cachedir):
+def handle_client(s, cachedir, blockhtml, blocked_domains):
 	"Run the proxy server on the given socket."
 	log = logging.getLogger(__name__)
 	while True:
@@ -168,6 +193,12 @@ def handle_client(s, cachedir):
 
 			log.debug (f"got method: {method}, url: {url}, version: {version}: headers: {reqhead[1:]}")
 
+			if is_blocked(url, blocked_domains):
+				log.debug(f"{url} matches a blocked domain - domain is blocked")
+				with open(blockhtml, "rb") as f:
+					conn.send(f.read())
+					continue
+
 			# extract headers and remove empty lines at the end and convert to a dict			
 			headers = {k.strip():v.strip() for k,v in [x.split(":", maxsplit = 1) for x in reqhead[1:]]}
 					
@@ -185,14 +216,26 @@ def handle_client(s, cachedir):
 
 			# check the method
 			if method == "GET":
-				# TODO check cache
+				# hash the url to get the cache file name
+				cache_fn = hashlib.md5(url.encode()).hexdigest()
+				cache_path = os.path.join(cachedir, cache_fn)
+				
+				# if the file already exists in cache send the cached version
+				if os.path.exists(cache_path):
+					log.debug("Cache HIT - getting resource from cache.")
+					with open(cache_path, "rb") as f:
+						chunk = f.read()
+						conn.send(chunk)
+					continue
 				
 				# if no cache, get the resource from the web
-				for chunk in do_web_method("GET", url, headers, payload):
-					# TODO probably want to cache the response here
-					
-					# send the result to the client
-					conn.send(chunk)
+				with open(cache_path, "wb") as f:
+					log.debug("Cache MISS - getting resource from web and caching.")
+					for chunk in do_web_method("GET", url, headers, payload):
+						f.write(chunk)
+						# send the result to the client
+						conn.send(chunk)
+
 			elif method in ['POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']:
 				# these cannot be cached, make the same request to the server			
 				for chunk in do_web_method(method, url, headers, payload):					
@@ -237,13 +280,24 @@ if __name__ == "__main__":
 	parser.add_argument('--datadir', type=str, default="./cache", 
 			 help='Path to cache directory')	
 	parser.add_argument('--threads', '-t', type=int, default=1, 
-			help='Number of threads to use')	
+			help='Number of threads to use')
+	parser.add_argument('--blockedfile', type=str, default="blocked.txt", 
+			help='Path to file with blocked domain')
+	parser.add_argument('--blockhtml', type=str, default="blocked.html", 
+			help='Path to HTML to send for blocked domain')			
 	args = parser.parse_args()
 
 	# set up logging
 	logging.basicConfig(level=logging.DEBUG, 
 		format='%(asctime)s [%(threadName)10s] %(levelname)7s: %(message)s')
 	log = logging.getLogger()
+
+	init_cache(args.datadir)
+	try:
+		blocked_domains = get_blocked_domain(args.blockedfile)
+	except:
+		log.error("Failed to read blockedfile - no blocked domains")
+		blocked_domains = list()
 
 	# accept connections on a socket
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -254,7 +308,7 @@ if __name__ == "__main__":
 	log.info(f"HTTP Proxy listening on TCP port {args.proxyport}.")
 	try:
 		# this is a sequential server, it can only handle one client at a time.
-		handle_client(s, args.datadir)
+		handle_client(s, args.datadir, args.blockhtml, blocked_domains)
 	except KeyboardInterrupt:
 		log.info("<ctrl-c> Shutting down.")
 	
